@@ -38,16 +38,21 @@ async def lifespan(app: FastAPI):
     models_dir = os.environ.get("OPENBIOMETRICS_MODELS_DIR") or str(
         Path(__file__).parent.parent.parent / "models"
     )
+    # ONNX device: -1 = CPU (default), >= 0 = CUDA device ID.
+    # GPU inference requires the onnxruntime-gpu build:
+    #   pip install -e "engine[gpu]"  (or swap onnxruntime for onnxruntime-gpu)
+    ctx_id = int(os.environ.get("OPENBIOMETRICS_CTX_ID", "-1"))
 
     config = BiometricConfig(
         face=FaceConfig(
             models_dir=models_dir,
-            ctx_id=-1,  # CPU on Mac, set to 0 for GPU
+            ctx_id=ctx_id,
         ),
         document=DocumentConfig(
             enabled=True,
             models_dir=models_dir,
             enable_face_extraction=True,
+            ctx_id=ctx_id,
         ),
         liveness=LivenessConfig(
             enabled=True,
@@ -55,7 +60,7 @@ async def lifespan(app: FastAPI):
         person=PersonConfig(
             enabled=True,
             models_dir=models_dir,
-            ctx_id=-1,  # CPU on Mac, set to 0 for GPU
+            ctx_id=ctx_id,
         ),
         video=VideoConfig(
             enabled=True,

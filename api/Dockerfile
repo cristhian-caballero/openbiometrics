@@ -51,6 +51,14 @@ ENV OPENBIOMETRICS_MODELS_DIR=/app/models
 VOLUME ["/app/doctr-cache"]
 ENV DOCTR_CACHE_DIR=/app/doctr-cache
 
+# ONNX device: -1 = CPU (default), >= 0 = CUDA device ID.
+# Build time:  docker build --build-arg OPENBIOMETRICS_CTX_ID=0 .
+# Runtime:     docker run -e OPENBIOMETRICS_CTX_ID=0 ...
+# GPU inference also needs the CUDA build of the runtime:
+#   docker build --build-arg ENGINE_EXTRAS=gpu .
+ARG OPENBIOMETRICS_CTX_ID=-1
+ENV OPENBIOMETRICS_CTX_ID=${OPENBIOMETRICS_CTX_ID}
+
 WORKDIR /app/api
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
