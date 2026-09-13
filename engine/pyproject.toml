@@ -20,7 +20,7 @@ person = ["ultralytics>=8.2"]
 liveness = ["mediapipe>=0.10"]
 all = ["openbiometrics-engine[document,person,liveness]"]
 cloud = ["openbiometrics-engine[aws]"]
-dev = ["pytest>=8.0", "ruff>=0.5"]
+dev = ["pytest>=8.0", "ruff>=0.5", "onnx>=1.15"]
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -54,8 +54,17 @@ class LivenessDetector:
     def _preprocess(self, face_crop: np.ndarray) -> np.ndarray:
         """Resize for MiniFASNet as raw BGR pixel values in [0, 255].
 
-        The shipped ONNX export embeds the mean/std normalization, so the
-        graph expects unnormalized uint8-scaled floats.
+        The shipped ONNX export is a plain ``torch.onnx.export`` of the
+        MiniFASNetV2 network — the graph contains NO input preprocessing
+        ops (no Div, no Sub, no ReduceMean). Verified by parsing the
+        protobuf: the tensor named ``input`` feeds directly into the
+        first Conv layer. The model was trained on raw [0, 255] float32
+        BGR pixels, so the consumer must also pass raw pixel values.
+
+        NB: the Hugging Face model card's "Preprocessing" section is
+        misleading — it describes what the upstream PyTorch training
+        data loader did, not what's baked into the ONNX graph. Do NOT
+        apply ``/255`` or ImageNet mean/std here.
         """
         img = cv2.resize(face_crop, self.input_size)
         img = img.astype(np.float32)

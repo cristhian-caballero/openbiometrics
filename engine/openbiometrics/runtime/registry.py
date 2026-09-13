@@ -75,6 +75,11 @@ _MODEL_CATALOG: dict[str, ModelInfo] = {
     "antispoofing": ModelInfo(
         name="antispoofing",
         filename="antispoofing.onnx",
+        # NB: the HF model card's "Preprocessing" section (which says
+        # `pixel / 255`) describes the upstream PyTorch training data
+        # loader, NOT what's baked into the ONNX graph. The graph has
+        # no input preprocessing; pass raw [0, 255] float32 BGR pixels.
+        # See LivenessDetector._preprocess and tests/test_liveness_preprocess.py.
         url="https://huggingface.co/garciafido/minifasnet-v2-anti-spoofing-onnx/resolve/main/minifasnet_v2.onnx",
         description="MiniFASNet passive liveness / anti-spoofing",
         size_mb=1.7,
