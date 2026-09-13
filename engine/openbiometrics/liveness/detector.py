@@ -60,6 +60,7 @@ class ActionDetector:
             thresholds: Custom detection thresholds. Uses defaults if None.
         """
         self._t = thresholds or ActionThresholds()
+        self._ear_baseline: float | None = None
 
     def check(self, mesh: FaceMesh, challenge_type: ChallengeType) -> tuple[bool, float]:
         """Evaluate whether *mesh* satisfies *challenge_type*.
@@ -82,7 +83,16 @@ class ActionDetector:
 
     def _check_blink(self, mesh: FaceMesh) -> tuple[bool, float]:
         min_ear = min(mesh.left_eye_ar, mesh.right_eye_ar)
-        # Confidence: how far below the threshold the EAR dropped.
+        # Track the widest open-eye reading seen this session as a baseline;
+        # a blink is a strong drop relative to that baseline (a single
+        # absolute EAR threshold can't distinguish small/hooded eyes).
+        if self._ear_baseline is None or min_ear > self._ear_baseline:
+            self._ear_baseline = min_ear
+        base = self._ear_baseline
+        if base >= 0.2 and min_ear < 0.65 * base:
+            confidence = min(1.0, (base - min_ear) / (0.5 * base))
+            return True, confidence
+        # Absolute fallback: EAR below threshold counts as closed (either eye).
         # 1.0 when fully closed (EAR ≈ 0), 0.0 at threshold.
         if min_ear < self._t.blink_ear:
             confidence = min(1.0, (self._t.blink_ear - min_ear) / self._t.blink_ear)

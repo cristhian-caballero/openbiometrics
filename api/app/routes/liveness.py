@@ -7,7 +7,12 @@ import numpy as np
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 from app.deps import get_kernel
-from app.schemas import ChallengeResultSchema, ChallengeSchema, LivenessSessionResponse
+from app.schemas import (
+    ChallengeOutcomeSchema,
+    ChallengeResultSchema,
+    ChallengeSchema,
+    LivenessSessionResponse,
+)
 from openbiometrics.kernel import BiometricKernel
 from openbiometrics.liveness.presets import LivenessPreset, get_preset, list_presets
 
@@ -36,9 +41,11 @@ def _decode_image(file_bytes: bytes) -> np.ndarray:
 
 def _session_to_response(session) -> LivenessSessionResponse:
     """Build a LivenessSessionResponse from an ActiveLivenessSession."""
+    state = session.state.value
+    is_live = True if state == "completed" else (False if state in ("failed", "expired") else None)
     return LivenessSessionResponse(
         session_id=session.session_id,
-        state=session.state.value,
+        state=state,
         challenges=[
             ChallengeSchema(
                 type=c.type.value,
@@ -47,6 +54,12 @@ def _session_to_response(session) -> LivenessSessionResponse:
             )
             for c in session.challenges
         ],
+        current_challenge_index=session.current_challenge_index,
+        results=[
+            ChallengeOutcomeSchema(challenge_type=t, passed=p, confidence=c)
+            for t, p, c in session.results
+        ],
+        is_live=is_live,
     )
 
 

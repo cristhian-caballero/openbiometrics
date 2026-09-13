@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   createLivenessSession,
   submitLivenessFrame,
@@ -6,6 +6,9 @@ import {
   type LivenessSession,
 } from '../api';
 import { ImageDropZone } from './ImageDropZone';
+import { CameraCapture } from './CameraCapture';
+
+type FrameSource = 'upload' | 'camera' | 'auto';
 
 export function LivenessPanel() {
   const [session, setSession] = useState<LivenessSession | null>(null);
@@ -15,6 +18,47 @@ export function LivenessPanel() {
   const [frameFile, setFrameFile] = useState<File | null>(null);
   const [framePreview, setFramePreview] = useState<string | null>(null);
   const [numChallenges, setNumChallenges] = useState(3);
+  const [source, setSource] = useState<FrameSource>('upload');
+
+  const sessionRef = useRef(session);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+  const submittingRef = useRef(false);
+
+  const isDone = (s: LivenessSession) => s.state === 'completed' || s.state === 'failed' || s.state === 'expired';
+
+  const submitFrameFile = async (file: File) => {
+    const s = sessionRef.current;
+    if (!s || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitLoading(true);
+    setError(null);
+    try {
+      const res = await submitLivenessFrame(s.session_id, file);
+      setSession(res);
+      setFrameFile(null);
+      setFramePreview(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to submit frame');
+    } finally {
+      submittingRef.current = false;
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleCameraFrame = (file: File, preview: string | null) => {
+    if (source === 'auto') {
+      void submitFrameFile(file);
+    } else {
+      setFrameFile(file);
+      setFramePreview(preview);
+    }
+  };
+
+  useEffect(() => {
+    if (session && source === 'auto' && isDone(session)) setSource('upload');
+  }, [session, source]);
 
   const handleStartSession = async () => {
     setLoading(true);
@@ -33,21 +77,8 @@ export function LivenessPanel() {
     }
   };
 
-  const handleSubmitFrame = async () => {
-    if (!session || !frameFile) return;
-    setSubmitLoading(true);
-    setError(null);
-
-    try {
-      const res = await submitLivenessFrame(session.session_id, frameFile);
-      setSession(res);
-      setFrameFile(null);
-      setFramePreview(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to submit frame');
-    } finally {
-      setSubmitLoading(false);
-    }
+  const handleSubmitFrame = () => {
+    if (frameFile) void submitFrameFile(frameFile);
   };
 
   const handleDeleteSession = async () => {
@@ -62,9 +93,9 @@ export function LivenessPanel() {
     }
   };
 
-  const isCompleted = session?.status === 'completed';
+  const isCompleted = session?.state === 'completed' || session?.state === 'failed';
   const currentChallenge = session && !isCompleted
-    ? session.challenges[session.current_challenge_index]
+    ? session.challenges[session.current_challenge_index]?.instruction
     : null;
 
   return (
@@ -147,13 +178,13 @@ export function LivenessPanel() {
 
               <div className="flex items-center gap-2">
                 <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  session.status === 'completed'
+                  session.state === 'completed'
                     ? 'bg-green-600/20 text-green-400'
-                    : session.status === 'expired'
+                    : session.state === 'failed' || session.state === 'expired'
                     ? 'bg-red-600/20 text-red-400'
                     : 'bg-indigo-600/20 text-indigo-400'
                 }`}>
-                  {session.status}
+                  {session.state}
                 </span>
               </div>
             </div>
@@ -170,24 +201,64 @@ export function LivenessPanel() {
               </div>
             )}
 
-            {/* Upload frame */}
+            {/* Frame source: camera stream / camera snap / file upload */}
             {!isCompleted && (
               <div className="space-y-3">
-                <ImageDropZone
-                  onImage={(f, p) => {
-                    setFrameFile(f);
-                    setFramePreview(p);
-                  }}
-                  preview={framePreview}
-                  label="Drop frame image for current challenge"
-                />
-                <button
-                  onClick={handleSubmitFrame}
-                  disabled={!frameFile || submitLoading}
-                  className="w-full px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-sm font-medium transition-colors"
-                >
-                  {submitLoading ? 'Submitting...' : 'Submit Frame'}
-                </button>
+                <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1 text-sm">
+                  {(['camera', 'auto', 'upload'] as FrameSource[]).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setSource(m)}
+                      className={`flex-1 rounded-md px-3 py-1.5 transition-colors ${
+                        source === m
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      {m === 'camera' ? 'Camera Snap' : m === 'auto' ? 'Camera Stream' : 'File Upload'}
+                    </button>
+                  ))}
+                </div>
+
+                {source === 'upload' ? (
+                  <>
+                    <ImageDropZone
+                      onImage={(f, p) => {
+                        setFrameFile(f);
+                        setFramePreview(p);
+                      }}
+                      preview={framePreview}
+                      label="Drop frame image for current challenge"
+                    />
+                    <button
+                      onClick={handleSubmitFrame}
+                      disabled={!frameFile || submitLoading}
+                      className="w-full px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {submitLoading ? 'Submitting...' : 'Submit Frame'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <CameraCapture active autoMs={source === 'auto' ? 300 : null} onFrame={handleCameraFrame} />
+                    {source === 'camera' && (
+                      <button
+                        onClick={handleSubmitFrame}
+                        disabled={!frameFile || submitLoading}
+                        className="w-full px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        {submitLoading ? 'Submitting...' : 'Submit Captured Frame'}
+                      </button>
+                    )}
+                    {source === 'auto' && (
+                      <p className="text-xs text-gray-500">
+                        Frames are sent automatically several times per second. Perform the current
+                        challenge on camera (e.g. blink a few times) — each pass advances to the
+                        next challenge.
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
@@ -226,7 +297,7 @@ export function LivenessPanel() {
                       <div className="flex items-center gap-3">
                         <div className={`w-2 h-2 rounded-full ${res.passed ? 'bg-green-500' : 'bg-red-500'}`} />
                         <div>
-                          <div className="text-sm font-medium">{session.challenges[i]}</div>
+                          <div className="text-sm font-medium">{session.challenges[i].type}</div>
                           <div className="text-xs text-gray-500">Challenge {i + 1}</div>
                         </div>
                       </div>

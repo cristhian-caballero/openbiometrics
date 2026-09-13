@@ -157,19 +157,24 @@ export interface DocumentScanResponse {
 // --- Liveness types ---
 
 export interface ChallengeResult {
-  challenge: string;
+  challenge_type: string;
   passed: boolean;
   confidence: number;
 }
 
+export interface LivenessChallenge {
+  type: string;
+  instruction: string;
+  timeout_seconds: number;
+}
+
 export interface LivenessSession {
   session_id: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'expired';
-  challenges: string[];
+  state: 'pending' | 'in_progress' | 'completed' | 'failed' | 'expired';
+  challenges: LivenessChallenge[];
   current_challenge_index: number;
   results: ChallengeResult[];
   is_live: boolean | null;
-  created_at: string;
 }
 
 // --- Video / Camera types ---
@@ -262,11 +267,10 @@ export async function verifyDocument(
 // --- Liveness functions ---
 
 export async function createLivenessSession(numChallenges = 3): Promise<LivenessSession> {
-  const res = await fetch(`${BASE}/liveness/sessions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ num_challenges: numChallenges }),
-  });
+  const res = await fetch(
+    `${BASE}/liveness/sessions?num_challenges=${numChallenges}&timeout_seconds=10`,
+    { method: 'POST' },
+  );
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -279,7 +283,8 @@ export async function submitLivenessFrame(sessionId: string, file: File): Promis
     body: form,
   });
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  await res.json();
+  return getLivenessSession(sessionId);
 }
 
 export async function getLivenessSession(sessionId: string): Promise<LivenessSession> {

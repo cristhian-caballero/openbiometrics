@@ -40,18 +40,24 @@ class LivenessDetector:
         blob = self._preprocess(face_crop)
         output = self._model.run(blob)[0][0]
 
-        # Softmax over [live, print-attack, replay-attack] logits (MiniFASNet)
+        # Softmax over [2D-attack, real, 3D-attack] logits.
+        # Class order follows the official MiniFASNet (Silent-Face-Anti-
+        # Spoofing) labeling, where index 1 is "real".
         exp_output = np.exp(output - np.max(output))
         probs = exp_output / exp_output.sum()
 
-        live_score = float(probs[0])
+        live_score = float(probs[1])
         is_live = live_score > 0.5
 
         return is_live, live_score
 
     def _preprocess(self, face_crop: np.ndarray) -> np.ndarray:
-        """Resize and normalize for MiniFASNet (BGR in [0, 1])."""
+        """Resize for MiniFASNet as raw BGR pixel values in [0, 255].
+
+        The shipped ONNX export embeds the mean/std normalization, so the
+        graph expects unnormalized uint8-scaled floats.
+        """
         img = cv2.resize(face_crop, self.input_size)
-        img = img.astype(np.float32) / 255.0
+        img = img.astype(np.float32)
         img = img.transpose(2, 0, 1)[np.newaxis, ...]
         return img.astype(np.float32)

@@ -147,6 +147,22 @@ class FacePipeline:
         return result
 
     @staticmethod
+    def _spoof_crop(
+        image: np.ndarray,
+        bbox: np.ndarray,
+        scale: float = 2.7,
+    ) -> np.ndarray:
+        """Square crop centered on the face bbox with surrounding context."""
+        h, w = image.shape[:2]
+        x1, y1, x2, y2 = (int(v) for v in bbox[:4])
+        side = max(1, int(max(x2 - x1, y2 - y1) * scale))
+        side = min(side, h, w)
+        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        x0 = min(max(cx - side // 2, 0), w - side)
+        y0 = min(max(cy - side // 2, 0), h - side)
+        return image[y0:y0 + side, x0:x0 + side]
+
+    @staticmethod
     def _resolve_model(
         selection: str,
         role: str,
@@ -213,9 +229,11 @@ class FacePipeline:
             if self._recognizer is not None:
                 result.embedding = self._recognizer.get_embedding(face.aligned)
 
-            # Liveness
+            # Liveness -- MiniFASNet expects a loose context crop around the
+            # face (bbox scaled ~2.7), not the 112px aligned warp.
             if self._liveness is not None:
-                result.is_live, result.liveness_score = self._liveness.check(face.aligned)
+                crop = self._spoof_crop(image, face.bbox)
+                result.is_live, result.liveness_score = self._liveness.check(crop)
 
             # Demographics
             if self._demographics is not None:

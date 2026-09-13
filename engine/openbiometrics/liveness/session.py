@@ -100,6 +100,7 @@ class ActiveLivenessSession:
         )
         self._challenge_index: int = 0
         self._challenge_start_time: float | None = None
+        self._outcomes: list[tuple[str, bool, float]] = []
 
         self._mesh_detector = FaceMeshDetector()
         self._action_detector = ActionDetector(thresholds)
@@ -120,6 +121,18 @@ class ActiveLivenessSession:
     def challenges(self) -> list[Challenge]:
         """The full challenge sequence (read-only copy)."""
         return list(self._sequence.challenges)
+
+    @property
+    def current_challenge_index(self) -> int:
+        """Index of the challenge currently awaiting completion."""
+        with self._lock:
+            return self._challenge_index
+
+    @property
+    def results(self) -> list[tuple[str, bool, float]]:
+        """Per-challenge outcomes recorded so far: (type, passed, confidence)."""
+        with self._lock:
+            return list(self._outcomes)
 
     def get_current_challenge(self) -> Challenge | None:
         """Return the current challenge, or None if the session is finished.
@@ -187,6 +200,7 @@ class ActiveLivenessSession:
             and (now - self._challenge_start_time) > challenge.timeout_seconds
         ):
             self._state = SessionState.FAILED
+            self._outcomes.append((challenge.type.value, False, 0.0))
             logger.info(
                 "Session %s FAILED — challenge %s timed out",
                 self.session_id,
@@ -219,6 +233,7 @@ class ActiveLivenessSession:
             )
             self._challenge_index += 1
             self._challenge_start_time = now  # reset timer for next challenge
+            self._outcomes.append((challenge.type.value, True, confidence))
 
             # All challenges done?
             if self._challenge_index >= len(self._sequence.challenges):

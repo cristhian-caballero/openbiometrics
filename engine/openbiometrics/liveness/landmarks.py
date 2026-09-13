@@ -305,10 +305,12 @@ class FaceMeshDetector:
             [[lm.x, lm.y, lm.z] for lm in face],
             dtype=np.float64,
         )
+        # Pixel-space copy so aspect ratios aren't skewed by non-square frames
+        pixels = landmarks * np.array([w, h, w], dtype=np.float64)
 
-        left_ear = _eye_aspect_ratio(landmarks, _LEFT_EYE)
-        right_ear = _eye_aspect_ratio(landmarks, _RIGHT_EYE)
-        mar = _mouth_aspect_ratio(landmarks)
+        left_ear = _eye_aspect_ratio(pixels, _LEFT_EYE)
+        right_ear = _eye_aspect_ratio(pixels, _RIGHT_EYE)
+        mar = _mouth_aspect_ratio(pixels)
         yaw, pitch, roll = _estimate_head_pose(landmarks, w, h)
 
         return FaceMesh(

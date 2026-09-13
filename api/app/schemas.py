@@ -141,10 +141,19 @@ class ChallengeSchema(BaseModel):
     timeout_seconds: float
 
 
+class ChallengeOutcomeSchema(BaseModel):
+    challenge_type: str
+    passed: bool
+    confidence: float
+
+
 class LivenessSessionResponse(BaseModel):
     session_id: str
     state: str
     challenges: list[ChallengeSchema]
+    current_challenge_index: int = 0
+    results: list[ChallengeOutcomeSchema] = []
+    is_live: bool | None = None
 
 
 class ChallengeResultSchema(BaseModel):

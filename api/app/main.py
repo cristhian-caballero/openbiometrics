@@ -55,6 +55,7 @@ async def lifespan(app: FastAPI):
         person=PersonConfig(
             enabled=True,
             models_dir=models_dir,
+            ctx_id=-1,  # CPU on Mac, set to 0 for GPU
         ),
         video=VideoConfig(
             enabled=True,
