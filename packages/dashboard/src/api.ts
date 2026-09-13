@@ -62,6 +62,7 @@ export interface IdentifyResponse {
 
 export interface HealthResponse {
   status: string;
+  version: string;
   models_loaded: boolean;
   watchlist_count: number;
 }
@@ -206,23 +207,16 @@ export interface EventInfo {
 
 export interface ModelStatus {
   name: string;
-  size: string;
-  status: 'loaded' | 'available' | 'missing';
+  module: string;
+  loaded: boolean;
 }
 
 export interface AdminHealth {
-  modules: {
-    face: { status: string; models_loaded: boolean };
-    document: { status: string; models_loaded: boolean };
-    liveness: { status: string; sessions_active: number };
-    video: { status: string; cameras_active: number };
-  };
-  system: {
-    uptime: string;
-    memory_used: string;
-    cpu_percent: number;
-  };
-  config: Record<string, unknown>;
+  version: string;
+  healthy: boolean;
+  modules: Record<string, boolean>;
+  models: Record<string, { name: string; tier: string; license: string }>;
+  details: Record<string, string>;
 }
 
 // --- Document functions ---
@@ -230,7 +224,7 @@ export interface AdminHealth {
 export async function scanDocument(file: File): Promise<DocumentScanResponse> {
   const form = new FormData();
   form.append('image', file);
-  const res = await fetch(`${BASE}/document/scan`, { method: 'POST', body: form });
+  const res = await fetch(`${BASE}/documents/scan`, { method: 'POST', body: form });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -238,7 +232,7 @@ export async function scanDocument(file: File): Promise<DocumentScanResponse> {
 export async function ocrDocument(file: File): Promise<OCRResult> {
   const form = new FormData();
   form.append('image', file);
-  const res = await fetch(`${BASE}/document/ocr`, { method: 'POST', body: form });
+  const res = await fetch(`${BASE}/documents/ocr`, { method: 'POST', body: form });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -246,7 +240,7 @@ export async function ocrDocument(file: File): Promise<OCRResult> {
 export async function mrzDocument(file: File): Promise<MRZResult> {
   const form = new FormData();
   form.append('image', file);
-  const res = await fetch(`${BASE}/document/mrz`, { method: 'POST', body: form });
+  const res = await fetch(`${BASE}/documents/mrz`, { method: 'POST', body: form });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -260,7 +254,7 @@ export async function verifyDocument(
   form.append('document', docFile);
   form.append('selfie', selfieFile);
   form.append('threshold', String(threshold));
-  const res = await fetch(`${BASE}/document/verify`, { method: 'POST', body: form });
+  const res = await fetch(`${BASE}/documents/verify`, { method: 'POST', body: form });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -268,7 +262,7 @@ export async function verifyDocument(
 // --- Liveness functions ---
 
 export async function createLivenessSession(numChallenges = 3): Promise<LivenessSession> {
-  const res = await fetch(`${BASE}/liveness/session`, {
+  const res = await fetch(`${BASE}/liveness/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ num_challenges: numChallenges }),
@@ -280,7 +274,7 @@ export async function createLivenessSession(numChallenges = 3): Promise<Liveness
 export async function submitLivenessFrame(sessionId: string, file: File): Promise<LivenessSession> {
   const form = new FormData();
   form.append('image', file);
-  const res = await fetch(`${BASE}/liveness/session/${sessionId}/frame`, {
+  const res = await fetch(`${BASE}/liveness/sessions/${sessionId}/frame`, {
     method: 'POST',
     body: form,
   });
@@ -289,13 +283,13 @@ export async function submitLivenessFrame(sessionId: string, file: File): Promis
 }
 
 export async function getLivenessSession(sessionId: string): Promise<LivenessSession> {
-  const res = await fetch(`${BASE}/liveness/session/${sessionId}`);
+  const res = await fetch(`${BASE}/liveness/sessions/${sessionId}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function deleteLivenessSession(sessionId: string): Promise<void> {
-  const res = await fetch(`${BASE}/liveness/session/${sessionId}`, { method: 'DELETE' });
+  const res = await fetch(`${BASE}/liveness/sessions/${sessionId}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(await res.text());
 }
 
@@ -316,7 +310,7 @@ export async function removeCamera(id: string): Promise<void> {
   if (!res.ok) throw new Error(await res.text());
 }
 
-export async function listCameras(): Promise<{ cameras: CameraInfo[] }> {
+export async function listCameras(): Promise<CameraInfo[]> {
   const res = await fetch(`${BASE}/video/cameras`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
@@ -347,7 +341,7 @@ export async function deleteWebhook(id: string): Promise<void> {
   if (!res.ok) throw new Error(await res.text());
 }
 
-export async function listWebhooks(): Promise<{ webhooks: WebhookInfo[] }> {
+export async function listWebhooks(): Promise<WebhookInfo[]> {
   const res = await fetch(`${BASE}/events/webhooks`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
@@ -356,10 +350,10 @@ export async function listWebhooks(): Promise<{ webhooks: WebhookInfo[] }> {
 export async function getRecentEvents(
   limit = 50,
   eventType?: string
-): Promise<{ events: EventInfo[] }> {
+): Promise<EventInfo[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (eventType) params.set('event_type', eventType);
-  const res = await fetch(`${BASE}/events?${params}`);
+  const res = await fetch(`${BASE}/events/recent?${params}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -372,7 +366,7 @@ export async function getAdminHealth(): Promise<AdminHealth> {
   return res.json();
 }
 
-export async function getModels(): Promise<{ models: ModelStatus[] }> {
+export async function getModels(): Promise<ModelStatus[]> {
   const res = await fetch(`${BASE}/admin/models`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();

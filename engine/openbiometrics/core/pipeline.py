@@ -48,6 +48,11 @@ class PipelineConfig:
     enable_quality: bool = True
     quality_gate: bool = False  # Skip recognition if quality fails
 
+    # Model selection — "auto" picks the best available model on disk
+    detector: str = "auto"  # yunet (community) | det_10g (legacy) | auto
+    recognizer: str = "auto"  # sface (community) | w600k_r50 (legacy) | auto
+    demographics_model: str = "auto"  # vit_genderage (community) | genderage (legacy) | auto
+
 
 class FacePipeline:
     """End-to-end face processing pipeline.

@@ -104,7 +104,7 @@ export function ResultScreen({ data, onRestart }: Props) {
           <SummaryCard
             title="Document"
             icon="&#x1F4C4;"
-            ok={data.documentScan?.detected ?? false}
+            ok={!!(data.documentScan?.has_face || data.documentScan?.mrz)}
           >
             {mrz ? (
               <div className="space-y-1 text-sm">

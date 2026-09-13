@@ -14,7 +14,7 @@ export function AdminPanel() {
       try {
         const [h, m] = await Promise.all([getAdminHealth(), getModels()]);
         setHealth(h);
-        setModels(m.models);
+        setModels(m);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load admin data');
       } finally {
@@ -60,26 +60,14 @@ export function AdminPanel() {
       {/* Module health cards */}
       {health && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <ModuleCard
-            name="Face"
-            status={health.modules.face.status}
-            detail={health.modules.face.models_loaded ? 'Models loaded' : 'Models not loaded'}
-          />
-          <ModuleCard
-            name="Document"
-            status={health.modules.document.status}
-            detail={health.modules.document.models_loaded ? 'Models loaded' : 'Models not loaded'}
-          />
-          <ModuleCard
-            name="Liveness"
-            status={health.modules.liveness.status}
-            detail={`${health.modules.liveness.sessions_active} active sessions`}
-          />
-          <ModuleCard
-            name="Video"
-            status={health.modules.video.status}
-            detail={`${health.modules.video.cameras_active} cameras active`}
-          />
+          {Object.entries(health.modules).map(([mod, ok]) => (
+            <ModuleCard
+              key={mod}
+              name={mod.replace(/_/g, ' ')}
+              status={ok ? 'ok' : 'error'}
+              detail={health.details[mod] ?? (ok ? 'loaded' : 'not loaded')}
+            />
+          ))}
         </div>
       )}
 
@@ -92,7 +80,7 @@ export function AdminPanel() {
               <thead>
                 <tr className="text-left text-xs text-gray-500 border-b border-gray-800">
                   <th className="pb-2 pr-4 font-medium">Name</th>
-                  <th className="pb-2 pr-4 font-medium">Size</th>
+                  <th className="pb-2 pr-4 font-medium">Module</th>
                   <th className="pb-2 font-medium">Status</th>
                 </tr>
               </thead>
@@ -100,20 +88,15 @@ export function AdminPanel() {
                 {models.map((model) => (
                   <tr key={model.name} className="border-b border-gray-800/50">
                     <td className="py-2.5 pr-4 font-medium">{model.name}</td>
-                    <td className="py-2.5 pr-4 text-gray-400 font-mono text-xs">{model.size}</td>
+                    <td className="py-2.5 pr-4 text-gray-400 font-mono text-xs">{model.module}</td>
                     <td className="py-2.5">
                       <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full ${
-                        model.status === 'loaded'
+                        model.loaded
                           ? 'bg-green-600/20 text-green-400 border border-green-500/30'
-                          : model.status === 'available'
-                          ? 'bg-yellow-600/20 text-yellow-400 border border-yellow-500/30'
                           : 'bg-red-600/20 text-red-400 border border-red-500/30'
                       }`}>
-                        <div className={`w-1.5 h-1.5 rounded-full ${
-                          model.status === 'loaded' ? 'bg-green-500' :
-                          model.status === 'available' ? 'bg-yellow-500' : 'bg-red-500'
-                        }`} />
-                        {model.status}
+                        <div className={`w-1.5 h-1.5 rounded-full ${model.loaded ? 'bg-green-500' : 'bg-red-500'}`} />
+                        {model.loaded ? 'loaded' : 'not loaded'}
                       </span>
                     </td>
                   </tr>
@@ -124,36 +107,18 @@ export function AdminPanel() {
         </div>
       )}
 
-      {/* System info */}
-      {health && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-3">
-            <h3 className="text-sm font-medium text-gray-400">System Info</h3>
-            <div className="space-y-2">
-              <InfoRow label="Uptime" value={health.system.uptime} />
-              <InfoRow label="Memory Used" value={health.system.memory_used} />
-              <InfoRow label="CPU Usage" value={`${health.system.cpu_percent.toFixed(1)}%`} />
-            </div>
-            {/* CPU bar */}
-            <div className="space-y-1">
-              <div className="w-full bg-gray-700 rounded-full h-1.5">
-                <div
-                  className={`h-1.5 rounded-full transition-all ${
-                    health.system.cpu_percent > 80 ? 'bg-red-500' :
-                    health.system.cpu_percent > 50 ? 'bg-yellow-500' : 'bg-green-500'
-                  }`}
-                  style={{ width: `${Math.min(100, health.system.cpu_percent)}%` }}
-                />
+      {/* Loaded model details */}
+      {health && Object.keys(health.models).length > 0 && (
+        <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-3">
+          <h3 className="text-sm font-medium text-gray-400">Active Models</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {Object.entries(health.models).map(([role, info]) => (
+              <div key={role} className="bg-gray-800/50 rounded-lg p-3 space-y-1">
+                <div className="text-xs text-gray-500 capitalize">{role}</div>
+                <div className="text-sm font-medium font-mono">{info.name}</div>
+                <div className="text-xs text-gray-500">{info.tier} · {info.license}</div>
               </div>
-            </div>
-          </div>
-
-          {/* Configuration */}
-          <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-3">
-            <h3 className="text-sm font-medium text-gray-400">Configuration</h3>
-            <pre className="bg-gray-800/50 rounded-lg p-3 text-xs text-gray-300 max-h-64 overflow-auto font-mono">
-              {JSON.stringify(health.config, null, 2)}
-            </pre>
+            ))}
           </div>
         </div>
       )}
@@ -185,15 +150,6 @@ function ModuleCard({ name, status, detail }: { name: string; status: string; de
       </div>
       <div className={`text-xs font-medium ${c.text}`}>{status}</div>
       <div className="text-xs text-gray-500">{detail}</div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm font-mono text-gray-300">{value}</span>
     </div>
   );
 }

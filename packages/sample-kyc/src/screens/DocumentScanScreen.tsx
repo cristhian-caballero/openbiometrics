@@ -114,7 +114,6 @@ export function DocumentScanScreen({ data, onUpdate, onNext, onBack }: Props) {
             <div className="mt-6 space-y-4">
               {/* Status badges */}
               <div className="flex flex-wrap gap-2">
-                <Badge ok={scan.detected} label={scan.detected ? 'Document Detected' : 'No Document'} />
                 <Badge ok={scan.has_face} label={scan.has_face ? 'Face Found' : 'No Face'} />
                 {mrz && (
                   <Badge
@@ -174,7 +173,7 @@ export function DocumentScanScreen({ data, onUpdate, onNext, onBack }: Props) {
             </button>
             <button
               onClick={onNext}
-              disabled={!scan || !scan.detected}
+              disabled={!scan || (!scan.has_face && !scan.mrz)}
               className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors text-sm cursor-pointer"
             >
               Continue to Selfie

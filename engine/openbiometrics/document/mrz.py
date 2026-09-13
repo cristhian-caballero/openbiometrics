@@ -85,11 +85,12 @@ class MRZParser:
     def detect_mrz_zone(self, image: np.ndarray) -> np.ndarray | None:
         """Detect the MRZ region in a document image.
 
-        Uses morphological operations to find the dense text block
-        typically located at the bottom of identity documents.
+        Uses morphological operations to find the dense monospaced text block
+        characteristic of ICAO MRZ strips. Searches the full image so that
+        documents photographed in any orientation are handled correctly.
 
         Args:
-            image: BGR document image (ideally perspective-corrected).
+            image: BGR document image.
 
         Returns:
             Cropped MRZ region as BGR array, or None if not found.
@@ -98,72 +99,51 @@ class MRZParser:
             return None
 
         h, w = image.shape[:2]
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        # Focus on the bottom portion of the document where MRZ is located
-        bottom_ratio = 0.45
-        roi_y = int(h * (1 - bottom_ratio))
-        roi = image[roi_y:, :]
-
-        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-
-        # Blackhat morphology to reveal dark text on light background
+        # Blackhat morphology reveals dark text on light background
         rect_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (13, 5))
         blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, rect_kernel)
 
-        # Threshold to get binary mask of text-like regions
         _, thresh = cv2.threshold(blackhat, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
 
-        # Close horizontally to merge MRZ characters into continuous blocks
+        # Close horizontally to merge MRZ characters into continuous line blocks
         close_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 5))
         closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, close_kernel)
 
-        # Erode vertically to remove noise
         erode_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         closed = cv2.erode(closed, erode_kernel, iterations=2)
         closed = cv2.dilate(closed, erode_kernel, iterations=2)
 
-        # Find contours of text blocks
         contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
         if not contours:
             return None
 
-        # Look for wide, short rectangular contours (MRZ characteristics)
+        # MRZ lines span at least 60 % of the image width and have a high aspect ratio
         candidates = []
-        roi_h, roi_w = roi.shape[:2]
-
         for contour in contours:
             x, y, cw, ch = cv2.boundingRect(contour)
             aspect = cw / ch if ch > 0 else 0
-
-            # MRZ lines are very wide relative to their height
-            if aspect > 5 and cw > roi_w * 0.5:
+            if aspect > 5 and cw > w * 0.6:
                 candidates.append((x, y, cw, ch))
 
         if not candidates:
-            # Fallback: take the widest contour in the bottom region
-            contour = max(contours, key=lambda c: cv2.boundingRect(c)[2])
-            x, y, cw, ch = cv2.boundingRect(contour)
-            if cw < roi_w * 0.3:
-                return None
-            candidates = [(x, y, cw, ch)]
+            return None
 
-        # Merge MRZ line candidates into a single bounding box
+        # Merge all candidate line boxes into one bounding rectangle
         min_x = min(c[0] for c in candidates)
         min_y = min(c[1] for c in candidates)
         max_x = max(c[0] + c[2] for c in candidates)
         max_y = max(c[1] + c[3] for c in candidates)
 
-        # Add padding
         pad_x = int((max_x - min_x) * 0.02)
         pad_y = int((max_y - min_y) * 0.15)
         min_x = max(0, min_x - pad_x)
         min_y = max(0, min_y - pad_y)
-        max_x = min(roi_w, max_x + pad_x)
-        max_y = min(roi_h, max_y + pad_y)
+        max_x = min(w, max_x + pad_x)
+        max_y = min(h, max_y + pad_y)
 
-        mrz_crop = roi[min_y:max_y, min_x:max_x]
-
+        mrz_crop = image[min_y:max_y, min_x:max_x]
         if mrz_crop.size == 0:
             return None
 
@@ -194,35 +174,68 @@ class MRZParser:
         """Extract and parse MRZ from a document image.
 
         Detects the MRZ zone, then uses OCR to read the text.
-        Falls back to direct text detection if doctr is not available.
+        Tries all four rotations so images captured sideways or upside-down
+        are handled automatically.
         """
-        mrz_crop = self.detect_mrz_zone(image)
-        if mrz_crop is None:
-            logger.debug("No MRZ zone detected in image")
-            return None
-
-        # Try to OCR the MRZ zone
         try:
             from openbiometrics.document.ocr import DocumentOCR
-
-            ocr = DocumentOCR()
-            result = ocr.extract(mrz_crop)
-            if result.full_text:
-                # Clean up OCR output for MRZ parsing
-                mrz_text = _clean_ocr_mrz(result.full_text)
-                return self._parse_text(mrz_text)
         except ImportError:
             logger.warning(
                 "doctr not installed — cannot OCR the MRZ zone. "
                 "Pass MRZ text directly to parse() instead."
             )
+            return None
 
+        rotations = [
+            image,
+            cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE),
+            cv2.rotate(image, cv2.ROTATE_180),
+            cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE),
+        ]
+
+        ocr = DocumentOCR()
+
+        # Pass 1: try zone detection + OCR for each rotation
+        for candidate in rotations:
+            mrz_crop = self.detect_mrz_zone(candidate)
+            if mrz_crop is None:
+                continue
+
+            try:
+                result = ocr.extract(mrz_crop)
+            except Exception:
+                continue
+
+            if result.full_text:
+                mrz_text = _clean_ocr_mrz(result.full_text)
+                parsed = self._parse_text(mrz_text)
+                if parsed is not None:
+                    return parsed
+
+        # Pass 2: zone detection failed or produced garbage — OCR the full image
+        # in each rotation and search for MRZ lines in the extracted text.
+        for candidate in rotations:
+            try:
+                result = ocr.extract(candidate)
+            except Exception:
+                continue
+
+            if result.full_text:
+                mrz_text = _clean_ocr_mrz(result.full_text)
+                parsed = self._parse_text(mrz_text)
+                if parsed is not None:
+                    return parsed
+
+        logger.debug("No MRZ zone detected in image (tried 4 rotations)")
         return None
 
     def _parse_text(self, text: str) -> MRZResult | None:
         """Parse MRZ from raw text lines.
 
         Supports TD1 (3x30), TD2 (2x36), and TD3 (2x44).
+        When more than the expected number of lines are present (e.g. full-page
+        OCR output), scans for consecutive lines whose lengths match a known
+        MRZ format.
         """
         # Normalize: strip whitespace, split lines, uppercase
         lines = [line.strip().upper() for line in text.strip().splitlines() if line.strip()]
@@ -242,7 +255,6 @@ class MRZParser:
 
         # Try to detect with tolerance (OCR may introduce length errors)
         if len(lines) == 3 and all(28 <= ln <= 32 for ln in line_lengths):
-            # Pad/trim to 30 chars
             lines = [_normalize_line(line, 30) for line in lines]
             return self._parse_td1(lines)
         elif len(lines) == 2:
@@ -253,6 +265,11 @@ class MRZParser:
             elif avg_len >= 34:
                 lines = [_normalize_line(line, 36) for line in lines]
                 return self._parse_td2(lines)
+
+        # Full-page OCR: scan for consecutive lines matching a known MRZ format
+        extracted = _extract_mrz_lines(lines)
+        if extracted is not None:
+            return self._parse_text("\n".join(extracted))
 
         logger.debug("Cannot determine MRZ format: %d lines, lengths=%s", len(lines), line_lengths)
         return None
@@ -501,3 +518,23 @@ def _clean_ocr_mrz(text: str) -> str:
             cleaned_lines.append(cleaned)
 
     return "\n".join(cleaned_lines)
+
+
+def _extract_mrz_lines(lines: list[str]) -> list[str] | None:
+    """Scan a list of text lines for a consecutive block matching a known MRZ format.
+
+    Useful when the input is full-page OCR output that contains the MRZ strip
+    somewhere among other text.  Returns the matching lines or None.
+    """
+    # (expected_count, target_length, tolerance)
+    formats = [
+        (3, 30, 2),  # TD1
+        (2, 44, 2),  # TD3 — check before TD2 (longer lines)
+        (2, 36, 2),  # TD2
+    ]
+    for count, target, tol in formats:
+        for i in range(len(lines) - count + 1):
+            window = lines[i : i + count]
+            if all(target - tol <= len(ln) <= target + tol for ln in window):
+                return [_normalize_line(ln, target) for ln in window]
+    return None

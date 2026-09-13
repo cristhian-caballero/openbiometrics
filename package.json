@@ -4,7 +4,7 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
-    "version:sync": "node -e \"const v=require('fs').readFileSync('VERSION','utf8').trim(); const g=require('child_process').execSync; ['packages/sdk','packages/www','packages/dashboard'].forEach(p=>{const f=p+'/package.json';const j=JSON.parse(require('fs').readFileSync(f));j.version=v;require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\\n');}); require('fs').writeFileSync('packages/sdk/src/version.ts',\`export const VERSION = '\${v}';\\n\`); console.log('Synced version to '+v)\""
+    "version:sync": "node -e \"const v=require('fs').readFileSync('VERSION','utf8').trim(); ['packages/sdk','packages/www','packages/dashboard'].forEach(p=>{const f=p+'/package.json';const j=JSON.parse(require('fs').readFileSync(f,'utf8'));j.version=v;require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\\n');}); require('fs').writeFileSync('packages/sdk/src/version.ts','export const VERSION = '+JSON.stringify(v)+';\\n'); console.log('Synced version to '+v)\""
   },
   "devDependencies": {
     "turbo": "^2"

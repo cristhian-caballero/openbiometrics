@@ -38,7 +38,7 @@ export function EventsPanel() {
   const fetchEvents = async () => {
     try {
       const res = await getRecentEvents(50, filterType || undefined);
-      setEvents(res.events);
+      setEvents(res);
     } catch {
       // silently fail on poll
     }
@@ -47,7 +47,7 @@ export function EventsPanel() {
   const fetchWebhooks = async () => {
     try {
       const res = await listWebhooks();
-      setWebhooks(res.webhooks);
+      setWebhooks(res);
     } catch {
       // silently fail
     }

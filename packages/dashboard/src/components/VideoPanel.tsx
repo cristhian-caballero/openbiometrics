@@ -19,7 +19,7 @@ export function VideoPanel() {
   const fetchCameras = async () => {
     try {
       const res = await listCameras();
-      setCameras(res.cameras);
+      setCameras(res);
     } catch {
       // silently fail on poll
     }

@@ -100,15 +100,19 @@ class DocumentPipeline:
             logger.warning("Empty image passed to DocumentPipeline.process()")
             return result
 
-        # Step 1: Detect document
+        # Step 1: Detect document boundary and perspective-correct it.
+        # If no boundary is found (e.g. close-up flat scan that fills the frame)
+        # fall back to treating the full image as the document surface.
         detections = self._detector.detect(image)
-        if not detections:
-            logger.debug("No document detected in image")
-            return result
-
-        doc = detections[0]  # Take the largest / most confident
-        result.document = doc
-        warped = doc.warped
+        if detections:
+            doc = detections[0]
+            result.document = doc
+            warped = doc.warped
+        else:
+            logger.debug(
+                "No document boundary detected — treating full image as document surface"
+            )
+            warped = image
 
         # Step 2: OCR (full text extraction)
         if self.config.enable_ocr:

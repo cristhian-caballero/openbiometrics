@@ -122,6 +122,8 @@ class MRZResultSchema(BaseModel):
     issuing_country: str
     raw_mrz: list[str] = []
     check_digits_valid: bool = False
+    optional_data_1: str = ""
+    optional_data_2: str = ""
 
 
 class DocumentScanResponse(BaseModel):

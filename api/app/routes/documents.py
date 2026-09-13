@@ -64,6 +64,8 @@ def _mrz_to_schema(mrz) -> MRZResultSchema:
         issuing_country=mrz.issuing_country,
         raw_mrz=mrz.raw_mrz,
         check_digits_valid=mrz.check_digits_valid,
+        optional_data_1=mrz.optional_data_1,
+        optional_data_2=mrz.optional_data_2,
     )
 
 
@@ -117,6 +119,14 @@ async def mrz_only(
     """MRZ detection and parsing only."""
     _require_document_module(kernel)
     img = _decode_image(await image.read())
+
+    try:
+        import doctr  # noqa: F401 — probe availability before delegating to engine
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="OCR engine (python-doctr) not installed — required for image-based MRZ detection",
+        )
 
     from openbiometrics.document.mrz import MRZParser
     parser = MRZParser()

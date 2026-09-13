@@ -202,6 +202,9 @@ class BiometricKernel:
             enable_demographics=face_cfg.enable_demographics,
             enable_quality=face_cfg.enable_quality,
             quality_gate=face_cfg.quality_gate,
+            detector=face_cfg.detector,
+            recognizer=face_cfg.recognizer,
+            demographics_model=face_cfg.demographics_model,
         )
         self._face_pipeline = FacePipeline(pipeline_config)
         self._face_pipeline.load()

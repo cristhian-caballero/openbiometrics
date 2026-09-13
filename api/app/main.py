@@ -6,6 +6,7 @@ Run with: uvicorn app.main:app --host 0.0.0.0 --port 8000
 from __future__ import annotations
 
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -34,7 +35,9 @@ DASHBOARD_DIR = Path(__file__).parent.parent.parent / "packages" / "dashboard" /
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    models_dir = str(Path(__file__).parent.parent.parent / "engine" / "models")
+    models_dir = os.environ.get("OPENBIOMETRICS_MODELS_DIR") or str(
+        Path(__file__).parent.parent.parent / "models"
+    )
 
     config = BiometricConfig(
         face=FaceConfig(
@@ -44,6 +47,7 @@ async def lifespan(app: FastAPI):
         document=DocumentConfig(
             enabled=True,
             models_dir=models_dir,
+            enable_face_extraction=True,
         ),
         liveness=LivenessConfig(
             enabled=True,

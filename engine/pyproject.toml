@@ -1,6 +1,6 @@
 [project]
 name = "openbiometrics-engine"
-dynamic = ["version"]
+version = "0.3.0"
 description = "Open-source biometric engine — face detection, recognition, liveness, quality, demographics"
 requires-python = ">=3.10"
 dependencies = [
@@ -26,9 +26,6 @@ dev = ["pytest>=8.0", "ruff>=0.5"]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-
-[tool.setuptools.dynamic]
-version = {file = "../VERSION"}
 
 [tool.setuptools.packages.find]
 include = ["openbiometrics*"]

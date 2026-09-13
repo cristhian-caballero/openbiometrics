@@ -17,7 +17,7 @@ export function StatusBar({ onVersion }: { onVersion?: (v: string) => void }) {
         .then((h) => {
           setHealth(h as ExtendedHealth);
           setError(false);
-          if (onVersion && (h as Record<string, unknown>).version) onVersion((h as Record<string, unknown>).version as string);
+          if (onVersion && h.version) onVersion(h.version);
         })
         .catch(() => setError(true));
 
