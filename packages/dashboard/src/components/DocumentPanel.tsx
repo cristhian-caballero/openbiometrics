@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { scanDocument, verifyDocument, type DocumentScanResponse, type VerifyResponse } from '../api';
+import { CameraCapture } from './CameraCapture';
 import { ImageDropZone } from './ImageDropZone';
+
+type SelfieSource = 'upload' | 'camera';
 
 export function DocumentPanel() {
   const [docFile, setDocFile] = useState<File | null>(null);
@@ -10,11 +13,18 @@ export function DocumentPanel() {
   const [error, setError] = useState<string | null>(null);
 
   // Verify against selfie
+  const [selfieSource, setSelfieSource] = useState<SelfieSource>('upload');
   const [selfieFile, setSelfieFile] = useState<File | null>(null);
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
   const [verifyResult, setVerifyResult] = useState<VerifyResponse | null>(null);
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  const handleCameraFrame = (file: File, preview: string | null) => {
+    setSelfieFile(file);
+    setSelfiePreview(preview);
+    setVerifyResult(null);
+  };
 
   const handleScan = async () => {
     if (!docFile) return;
@@ -66,6 +76,7 @@ export function DocumentPanel() {
               setDocPreview(p);
               setResult(null);
               setVerifyResult(null);
+              setSelfieSource('upload');
             }}
             preview={docPreview}
             label="Drop document image here"
@@ -155,16 +166,45 @@ export function DocumentPanel() {
 
               {/* Verify against selfie */}
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-4">
-                <h3 className="text-sm font-medium text-gray-400">Verify Against Selfie</h3>
-                <ImageDropZone
-                  onImage={(f, p) => {
-                    setSelfieFile(f);
-                    setSelfiePreview(p);
-                    setVerifyResult(null);
-                  }}
-                  preview={selfiePreview}
-                  label="Drop selfie image here"
-                />
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-gray-400">Verify Against Selfie</h3>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setSelfieSource('upload')}
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                        selfieSource === 'upload'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      Upload
+                    </button>
+                    <button
+                      onClick={() => setSelfieSource('camera')}
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                        selfieSource === 'camera'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      Camera
+                    </button>
+                  </div>
+                </div>
+
+                {selfieSource === 'upload' ? (
+                  <ImageDropZone
+                    onImage={(f, p) => {
+                      setSelfieFile(f);
+                      setSelfiePreview(p);
+                      setVerifyResult(null);
+                    }}
+                    preview={selfiePreview}
+                    label="Drop selfie image here"
+                  />
+                ) : (
+                  <CameraCapture active={true} onFrame={handleCameraFrame} />
+                )}
                 <button
                   onClick={handleVerify}
                   disabled={!selfieFile || verifyLoading}
@@ -180,18 +220,46 @@ export function DocumentPanel() {
                 )}
 
                 {verifyResult && (
-                  <div className={`rounded-lg border p-4 text-center space-y-2 ${
-                    verifyResult.is_match
-                      ? 'bg-green-500/5 border-green-500/30'
-                      : 'bg-red-500/5 border-red-500/30'
-                  }`}>
-                    <div className={`text-2xl font-bold ${verifyResult.is_match ? 'text-green-400' : 'text-red-400'}`}>
-                      {verifyResult.is_match ? 'MATCH' : 'NO MATCH'}
+                  <>
+                    <div className={`rounded-lg border p-4 text-center space-y-2 ${
+                      verifyResult.is_match
+                        ? 'bg-green-500/5 border-green-500/30'
+                        : 'bg-red-500/5 border-red-500/30'
+                    }`}>
+                      <div className={`text-2xl font-bold ${verifyResult.is_match ? 'text-green-400' : 'text-red-400'}`}>
+                        {verifyResult.is_match ? 'MATCH' : 'NO MATCH'}
+                      </div>
+                      <div className="text-sm">
+                        Similarity: <span className="font-mono font-bold">{(verifyResult.similarity * 100).toFixed(2)}%</span>
+                      </div>
                     </div>
-                    <div className="text-sm">
-                      Similarity: <span className="font-mono font-bold">{(verifyResult.similarity * 100).toFixed(2)}%</span>
-                    </div>
-                  </div>
+
+                    {verifyResult.face2?.liveness && (
+                      <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-3">
+                        <h3 className="text-sm font-medium text-gray-400">Selfie Liveness Check</h3>
+                        {verifyResult.face2.liveness.is_live === null ? (
+                          <p className="text-xs text-gray-500">Liveness model not available</p>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                              verifyResult.face2.liveness.is_live
+                                ? 'bg-green-600/20 text-green-400 border-green-500/30'
+                                : 'bg-red-600/20 text-red-400 border-red-500/30'
+                            }`}>
+                              {verifyResult.face2.liveness.is_live ? 'LIVE' : 'SPOOF'}
+                            </span>
+                            {verifyResult.face2.liveness.score !== null && (
+                              <span className="text-sm text-gray-300">
+                                Score: <span className="font-mono font-bold">
+                                  {(verifyResult.face2.liveness.score * 100).toFixed(1)}%
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </>
