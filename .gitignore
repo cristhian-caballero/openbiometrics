@@ -13,7 +13,7 @@ build/
 # Models (large binary files)
 engine/models/*.onnx
 models/
-
+doctr-cache
 # Data
 watchlists/
 
